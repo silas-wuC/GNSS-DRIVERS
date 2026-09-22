@@ -72,7 +72,8 @@ def run_read_loop(receiver: UM982, dump_unparsed: bool) -> None:
         sentence = receiver.read_sentence()
         if sentence is None:
             silent_for_s = time.monotonic() - started_at_s
-            if not warned_about_silence and silent_for_s > NO_DATA_WARN_AFTER_S:
+            stayed_silent = silent_for_s > NO_DATA_WARN_AFTER_S
+            if stayed_silent and not warned_about_silence:
                 print(
                     "\nNo valid NMEA yet; check the baud rate "
                     "(module default is 115200)."
