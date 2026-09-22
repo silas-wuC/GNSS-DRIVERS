@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gnss-drivers"
+version = "0.1.0"
+description = "Experiment-bench GNSS drivers, starting with the Unicore UM982"
+requires-python = ">=3.10"
+dependencies = ["pyserial>=3.5"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Let a fresh clone run pytest without an editable install first.
+pythonpath = ["src"]
+
+[tool.autopep8]
+max_line_length = 79
+aggressive = 2
