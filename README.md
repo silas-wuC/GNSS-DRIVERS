@@ -31,11 +31,15 @@
 
 解析與傳輸刻意分層：`nmea.py` / `fix.py` 不 import `serial`，所以測試直接餵字串、不用 mock，錄下來的 log 也能離線重放。
 
+> ⚠️ **安裝需要 `setuptools>=61`（editable 需 `>=64`）與 `pip>=21.3`**。舊版 setuptools 會**靜默忽略** `pyproject.toml` 的 `[project]` 區塊，裝出一個名為 `UNKNOWN-0.0.0` 的空套件且不報錯。因此 `pytest` 走 `pythonpath` 設定、不依賴安裝 —— clone 下來就能跑測試。
+
 ## 安裝與執行
 
 ```bash
+python -m pytest                     # 直接可跑，不接硬體、免安裝
+
+# 想以套件方式 import 才需要安裝
 pip install -e ".[dev]"
-python -m pytest                     # 不接硬體即可全綠
 
 python scripts/read_um982.py                          # 不帶 --port 列出可用埠
 python scripts/read_um982.py --port /dev/ttyUSB0      # Linux／WSL

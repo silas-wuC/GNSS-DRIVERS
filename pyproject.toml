@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=61"]
+# 64.0 is the first release with PEP 660 editable install support.
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
