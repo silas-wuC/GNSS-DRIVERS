@@ -14,11 +14,14 @@ DEFAULT_BAUD_RATE = 230400
 DEFAULT_READ_TIMEOUT_S = 1.0
 INIT_CMD_DELAY_S = 0.08
 INIT_SAVECONFIG_SETTLE_S = 0.35
-INIT_DRAIN_LINES_MAX = 3
+INIT_REPLY_TIMEOUT_S = 5.0
 INIT_DRAIN_READ_TIMEOUT_S = 0.05
 SAVECONFIG_COMMAND = "SAVECONFIG"
-# Unicore N4 receivers echo each command as "$command,<text>,response: OK".
+# Unicore N4 receivers echo each command as "$command,<text>,response: OK",
+# or "response: PARSING FAILED <reason>" when they reject it.
 COMMAND_REPLY_PREFIX = "$command,"
+COMMAND_REPLY_MARKER = ",response:"
+COMMAND_REPLY_OK = "response: OK"
 
 # Syntax follows the Unicore N4 commands manual R1.15. Log requests must use
 # the GP prefix whatever talker the output carries, and leave out the port so
@@ -49,20 +52,31 @@ class UM982ReadError(Exception):
     """Raised when the port stops delivering data, typically unplugged."""
 
 
+class UM982InitError(Exception):
+    """Raised when the module rejects an init command or never answers."""
+
+
 @dataclass
 class InitTiming:
     """Pacing for the start-up command sequence."""
 
     cmd_delay_s: float = INIT_CMD_DELAY_S
     saveconfig_settle_s: float = INIT_SAVECONFIG_SETTLE_S
-    drain_lines_max: int = INIT_DRAIN_LINES_MAX
+    reply_timeout_s: float = INIT_REPLY_TIMEOUT_S
     drain_read_timeout_s: float = INIT_DRAIN_READ_TIMEOUT_S
 
 
 def reply_status_text(reply_line: str) -> str:
-    """Turn "$command,X,response: OK*5C" into "response: OK"."""
+    """Turn "$command,X,response: OK*5C" into "response: OK".
+
+    Cut at the marker, not at the last comma: a rejection reason can hold
+    commas itself, e.g. "PARSING FAILED FIELD OUT OF RANGE,300".
+    """
     reply_body = reply_line.split("*", 1)[0]
-    return reply_body.rsplit(",", 1)[-1].strip()
+    marker_idx = reply_body.find(COMMAND_REPLY_MARKER)
+    if marker_idx < 0:
+        return reply_body.strip()
+    return reply_body[marker_idx + 1:].strip()
 
 
 class UM982:
@@ -123,29 +137,30 @@ class UM982:
         port.write((command_text + "\r\n").encode("ascii"))
         port.flush()
 
-    def _drain_responses(self) -> Optional[str]:
-        """Read back what the command provoked; return its reply line.
+    def _wait_for_reply(self) -> Optional[str]:
+        """Return the command's reply line, or None if time runs out.
 
         Without this a rejected command is indistinguishable from an
         accepted one, because the module keeps streaming NMEA either way.
+        The wait is bounded by time, not by line count: the reply queues
+        behind everything the module had already buffered for output, and
+        an overloaded log list leaves seconds of it.
         """
         port = self._require_port()
         read_timeout_prev = port.timeout
         port.timeout = self.init_timing.drain_read_timeout_s
-        reply_line = None
+        deadline_s = time.monotonic() + self.init_timing.reply_timeout_s
         try:
-            for _ in range(self.init_timing.drain_lines_max):
+            while time.monotonic() < deadline_s:
                 raw_line = port.readline()
                 if not raw_line:
-                    break
+                    continue
                 line_text = raw_line.decode("ascii", errors="ignore").strip()
-                if reply_line is None and line_text.startswith(
-                    COMMAND_REPLY_PREFIX
-                ):
-                    reply_line = line_text
+                if line_text.startswith(COMMAND_REPLY_PREFIX):
+                    return line_text
         finally:
             port.timeout = read_timeout_prev
-        return reply_line
+        return None
 
     def apply_init_commands(
         self,
@@ -158,8 +173,10 @@ class UM982:
         once written, and rewriting identical config on every run only spends
         the module's limited flash endurance.
 
-        A missing reply is reported, not raised: the drain window is only a
-        few lines, so a reply can be pushed out by streaming NMEA.
+        Raises UM982InitError at the first command the module rejects or
+        does not answer within reply_timeout_s. Carrying on would leave the
+        module on whatever its flash holds while the caller believes its own
+        list is in effect. Commands sent before the failure stay applied.
         """
         port = self._require_port()
         port.reset_input_buffer()
@@ -172,15 +189,20 @@ class UM982:
         command_total = len(commands)
         for command_idx, command_text in enumerate(commands, start=1):
             self.send_command(command_text)
-            reply_line = self._drain_responses()
+            reply_line = self._wait_for_reply()
+            if reply_line is None:
+                raise UM982InitError(
+                    f"{command_text}: no reply within "
+                    f"{self.init_timing.reply_timeout_s} s; "
+                    "check the baud rate"
+                )
+            reply_text = reply_status_text(reply_line)
+            if reply_text != COMMAND_REPLY_OK:
+                raise UM982InitError(command_text + ": " + reply_text)
             if command_text == SAVECONFIG_COMMAND:
                 time.sleep(self.init_timing.saveconfig_settle_s)
             else:
                 time.sleep(self.init_timing.cmd_delay_s)
-            if reply_line is None:
-                reply_text = "no response seen"
-            else:
-                reply_text = reply_status_text(reply_line)
             yield (
                 f"{command_idx}/{command_total} {command_text}"
                 f" -> {reply_text}"

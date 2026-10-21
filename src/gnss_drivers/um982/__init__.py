@@ -6,6 +6,7 @@ from gnss_drivers.um982.driver import (
     MODULE_INIT_COMMANDS,
     UM982,
     InitTiming,
+    UM982InitError,
     UM982ReadError,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "MODULE_INIT_COMMANDS",
     "UM982",
     "InitTiming",
+    "UM982InitError",
     "UM982ReadError",
 ]

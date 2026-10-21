@@ -113,6 +113,7 @@ def test_bad_init_commands_are_rejected(command_list, error_text):
         ("baud", 0),
         ("read_timeout_s", 0.0),
         ("init_drain_read_timeout_s", 0.0),
+        ("init_reply_timeout_s", 0.0),
         ("empty_read_limit", -1),
         ("init_cmd_delay_s", -0.1),
     ],

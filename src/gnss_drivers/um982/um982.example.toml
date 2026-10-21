@@ -30,8 +30,11 @@ empty_read_limit = 10
 cmd_delay_s = 0.08
 # SAVECONFIG writes flash and needs longer before the next command.
 saveconfig_settle_s = 0.35
-# Lines read back after each command while looking for its reply.
-drain_lines_max = 3
+# Longest wait for each command's reply. The reply queues behind output
+# the module had already buffered, so leave room for a few seconds of
+# backlog. No reply in time, or any reply but OK, aborts the run.
+reply_timeout_s = 5.0
+# Read timeout while polling for that reply.
 drain_read_timeout_s = 0.05
 # Sent in order on every start. SAVECONFIG is rejected here; use
 # run.save_config instead.

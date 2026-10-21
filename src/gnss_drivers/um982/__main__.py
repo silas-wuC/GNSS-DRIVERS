@@ -18,7 +18,7 @@ from gnss_drivers.um982.config import (
     load_config_file,
     validate_config,
 )
-from gnss_drivers.um982.driver import UM982, UM982ReadError
+from gnss_drivers.um982.driver import UM982, UM982InitError, UM982ReadError
 
 STATUS_LINE_PAD_CHARS = 24
 
@@ -115,11 +115,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         f"(default {defaults.init_saveconfig_settle_s}).",
     )
     parser.add_argument(
-        "--init-drain-lines-max",
-        type=int,
+        "--init-reply-timeout-s",
+        type=float,
         default=None,
-        help="Lines read back per init command "
-        f"(default {defaults.init_drain_lines_max}).",
+        help="Longest wait for each init command's reply "
+        f"(default {defaults.init_reply_timeout_s}).",
     )
     parser.add_argument(
         "--init-drain-read-timeout-s",
@@ -226,6 +226,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         run_read_loop(receiver, config)
     except KeyboardInterrupt:
         print("\nStopped.")
+    except UM982InitError as exc:
+        print("Init failed: " + str(exc))
+        return 1
     except UM982ReadError as exc:
         print("\nRead failed: " + str(exc))
         return 1

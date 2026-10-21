@@ -21,8 +21,8 @@ from gnss_drivers.um982.driver import (
     DEFAULT_READ_TIMEOUT_S,
     EMPTY_READ_LIMIT,
     INIT_CMD_DELAY_S,
-    INIT_DRAIN_LINES_MAX,
     INIT_DRAIN_READ_TIMEOUT_S,
+    INIT_REPLY_TIMEOUT_S,
     INIT_SAVECONFIG_SETTLE_S,
     MODULE_INIT_COMMANDS,
     SAVECONFIG_COMMAND,
@@ -54,7 +54,7 @@ class UM982Config:
     empty_read_limit: int = EMPTY_READ_LIMIT
     init_cmd_delay_s: float = INIT_CMD_DELAY_S
     init_saveconfig_settle_s: float = INIT_SAVECONFIG_SETTLE_S
-    init_drain_lines_max: int = INIT_DRAIN_LINES_MAX
+    init_reply_timeout_s: float = INIT_REPLY_TIMEOUT_S
     init_drain_read_timeout_s: float = INIT_DRAIN_READ_TIMEOUT_S
     init_commands: List[str] = field(
         default_factory=lambda: list(MODULE_INIT_COMMANDS)
@@ -64,7 +64,7 @@ class UM982Config:
         return InitTiming(
             cmd_delay_s=self.init_cmd_delay_s,
             saveconfig_settle_s=self.init_saveconfig_settle_s,
-            drain_lines_max=self.init_drain_lines_max,
+            reply_timeout_s=self.init_reply_timeout_s,
             drain_read_timeout_s=self.init_drain_read_timeout_s,
         )
 
@@ -86,7 +86,7 @@ CONFIG_KEYS = {
     "init": {
         "cmd_delay_s": ("init_cmd_delay_s", float),
         "saveconfig_settle_s": ("init_saveconfig_settle_s", float),
-        "drain_lines_max": ("init_drain_lines_max", int),
+        "reply_timeout_s": ("init_reply_timeout_s", float),
         "drain_read_timeout_s": ("init_drain_read_timeout_s", float),
         "commands": ("init_commands", list),
     },
@@ -183,12 +183,14 @@ def validate_config(config: UM982Config) -> None:
         raise UM982ConfigError("read_timeout_s must be > 0")
     if config.init_drain_read_timeout_s <= 0:
         raise UM982ConfigError("init_drain_read_timeout_s must be > 0")
+    # Zero would fail every init on the first command without waiting.
+    if config.init_reply_timeout_s <= 0:
+        raise UM982ConfigError("init_reply_timeout_s must be > 0")
     non_negative_fields = [
         "no_data_warn_after_s",
         "empty_read_limit",
         "init_cmd_delay_s",
         "init_saveconfig_settle_s",
-        "init_drain_lines_max",
     ]
     for field_name in non_negative_fields:
         if getattr(config, field_name) < 0:
