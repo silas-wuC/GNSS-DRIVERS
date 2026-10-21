@@ -27,22 +27,24 @@
 | `src/gnss_drivers/serial_port.py` | 埠列舉與 Windows `COM10+` 路徑修正 |
 | `src/gnss_drivers/um982/` | UM982 驅動、設定檔、CLI 與說明，見[該目錄 README](src/gnss_drivers/um982/README.md) |
 | `tests/` | 解析層單元測試，**不需要硬體** |
+| `run_um982.py` | UM982 啟動腳本，免安裝、免 PYTHONPATH |
+| `requirements.txt` | 執行期依賴，與 `pyproject.toml` 同步 |
 
 解析與傳輸刻意分層：`nmea.py` / `fix.py` 不 import `serial`，所以測試直接餵字串、不用 mock，錄下來的 log 也能離線重放。
 
-> ⚠️ **安裝需要 `setuptools>=61`（editable 需 `>=64`）與 `pip>=21.3`**。舊版 setuptools 會**靜默忽略** `pyproject.toml` 的 `[project]` 區塊，裝出一個名為 `UNKNOWN-0.0.0` 的空套件且不報錯。因此 `pytest` 走 `pythonpath` 設定、不依賴安裝 —— clone 下來就能跑測試。
-
 ## 安裝與執行
 
+在倉庫根目錄：
+
 ```bash
-python -m pytest                     # 不接硬體、免安裝；只需 pyserial（3.10 另需 tomli）
+pip install -r requirements.txt
+python run_um982.py                  # 列出可用序列埠
+python run_um982.py --port COM29     # 參數也可寫進 ./um982.toml
 
-# 想以套件方式 import 才需要安裝
-pip install -e ".[dev]"
-
-python -m gnss_drivers.um982                          # 不帶 --port 列出可用埠
-python -m gnss_drivers.um982 --port COM29             # 參數也可寫進 ./um982.toml
+pip install pytest && python -m pytest   # 跑測試，不需要硬體
 ```
+
+想在別的項目 `import gnss_drivers` 才需要 `pip install -e .`。⚠️ 這需要 `setuptools>=64` 與 `pip>=21.3`：舊版 setuptools 會**靜默忽略** `pyproject.toml` 的 `[project]` 區塊，裝出一個名為 `UNKNOWN-0.0.0` 的空套件且不報錯。
 
 各裝置的參數、設定檔與接線細節寫在各自目錄的 README。
 

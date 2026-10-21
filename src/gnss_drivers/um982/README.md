@@ -6,7 +6,7 @@ Unicore UM982 雙天線 RTK 模組：同時輸出定位與定向（yaw）。本�
 |---|---|
 | `driver.py` | 序列埠傳輸、初始化時序、讀取迴圈（`UM982`、`InitTiming`） |
 | `config.py` | TOML 設定載入、型別與範圍檢查、命令行覆蓋（`UM982Config`） |
-| `__main__.py` | CLI：`python -m gnss_drivers.um982` |
+| `__main__.py` | CLI 主程序，由根目錄 `run_um982.py` 或 `python -m gnss_drivers.um982` 啟動 |
 | `um982.example.toml` | 設定範本，數值與代碼預設**完全一致**（有測試把關） |
 
 NMEA 解析（`nmea.py`）、接收機狀態（`fix.py`）、埠工具（`serial_port.py`）是跨型號共用層，放在上一層 `gnss_drivers/`。
@@ -15,28 +15,17 @@ NMEA 解析（`nmea.py`）、接收機狀態（`fix.py`）、埠工具（`serial
 
 ## 快速開始
 
-```bash
-# 在倉庫根目錄
-pip install -e ".[dev]"          # Python 3.10 會順帶裝 tomli
-
-cp src/gnss_drivers/um982/um982.example.toml um982.toml   # 改 port 等
-python -m gnss_drivers.um982                       # 讀 ./um982.toml；沒寫 port 就列出可用埠
-python -m gnss_drivers.um982 --port /dev/ttyUSB0   # Linux／WSL
-python -m gnss_drivers.um982 --port COM29          # Windows
-```
-
-不想安裝，直接從 clone 下來的目錄跑：
+在倉庫根目錄：
 
 ```bash
-PYTHONPATH=src python -m gnss_drivers.um982 --port /dev/ttyUSB0   # Linux／WSL
+pip install -r requirements.txt
+python run_um982.py                  # 列出可用序列埠
+python run_um982.py --port COM29     # Windows；Linux／WSL 用 /dev/ttyUSB0
 ```
-```powershell
-$env:PYTHONPATH = "src"; python -m gnss_drivers.um982 --port COM29   # PowerShell
-```
-```bat
-set PYTHONPATH=src
-python -m gnss_drivers.um982 --port COM29
-```
+
+要固定參數，把 `src/gnss_drivers/um982/um982.example.toml` 複製成根目錄的 `um982.toml`，改 `port` 後直接 `python run_um982.py`。
+
+裝過套件（`pip install -e .`）的話，`python -m gnss_drivers.um982` 等價，參數完全相同。
 
 > `um982.toml` 已列入 `.gitignore`：每個台架的 COM 埠、基線長度都不同，提交上去只會互相覆蓋。要分享設定就改範本。
 
@@ -112,19 +101,19 @@ baud = 115200
 **設定已存 flash，只讀資料**：
 
 ```bash
-python -m gnss_drivers.um982 --no-init
+python run_um982.py --no-init
 ```
 
 **改完 `commands` 後存一次 flash，之後不再存**：
 
 ```bash
-python -m gnss_drivers.um982 --save-config   # 只跑這一次
+python run_um982.py --save-config   # 只跑這一次
 ```
 
 **config 開了 dump，這次不想要**：
 
 ```bash
-python -m gnss_drivers.um982 --no-dump
+python run_um982.py --no-dump
 ```
 
 ---
