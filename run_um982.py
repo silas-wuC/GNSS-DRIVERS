@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Run the UM982 CLI from a fresh clone without installing the package."""
 
 import os
