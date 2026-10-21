@@ -1,6 +1,7 @@
 """Unicore UM982 serial transport and start-up sequence."""
 
 import time
+from dataclasses import dataclass
 from typing import Iterator, List, Optional
 
 import serial
@@ -16,6 +17,8 @@ INIT_SAVECONFIG_SETTLE_S = 0.35
 INIT_DRAIN_LINES_MAX = 3
 INIT_DRAIN_READ_TIMEOUT_S = 0.05
 SAVECONFIG_COMMAND = "SAVECONFIG"
+# Unicore N4 receivers echo each command as "$command,<text>,response: OK".
+COMMAND_REPLY_PREFIX = "$command,"
 
 # KSXT is enabled but not parsed yet; it is left on so --dump can capture a
 # real sample to write the parser against. Drop it once that is done.
@@ -42,16 +45,38 @@ class UM982ReadError(Exception):
     """Raised when the port stops delivering data, typically unplugged."""
 
 
+@dataclass
+class InitTiming:
+    """Pacing for the start-up command sequence."""
+
+    cmd_delay_s: float = INIT_CMD_DELAY_S
+    saveconfig_settle_s: float = INIT_SAVECONFIG_SETTLE_S
+    drain_lines_max: int = INIT_DRAIN_LINES_MAX
+    drain_read_timeout_s: float = INIT_DRAIN_READ_TIMEOUT_S
+
+
+def reply_status_text(reply_line: str) -> str:
+    """Turn "$command,X,response: OK*5C" into "response: OK"."""
+    reply_body = reply_line.split("*", 1)[0]
+    return reply_body.rsplit(",", 1)[-1].strip()
+
+
 class UM982:
     def __init__(
         self,
         port_name: str,
         baud_rate: int = DEFAULT_BAUD_RATE,
         read_timeout_s: float = DEFAULT_READ_TIMEOUT_S,
+        empty_read_limit: int = EMPTY_READ_LIMIT,
+        init_timing: Optional[InitTiming] = None,
     ) -> None:
         self.port_name = port_name
         self.baud_rate = baud_rate
         self.read_timeout_s = read_timeout_s
+        self.empty_read_limit = empty_read_limit
+        if init_timing is None:
+            init_timing = InitTiming()
+        self.init_timing = init_timing
         self._serial: Optional[serial.Serial] = None
         self._fix = GnssFix()
 
@@ -94,40 +119,68 @@ class UM982:
         port.write((command_text + "\r\n").encode("ascii"))
         port.flush()
 
-    def _drain_responses(self) -> None:
+    def _drain_responses(self) -> Optional[str]:
+        """Read back what the command provoked; return its reply line.
+
+        Without this a rejected command is indistinguishable from an
+        accepted one, because the module keeps streaming NMEA either way.
+        """
         port = self._require_port()
         read_timeout_prev = port.timeout
-        port.timeout = INIT_DRAIN_READ_TIMEOUT_S
+        port.timeout = self.init_timing.drain_read_timeout_s
+        reply_line = None
         try:
-            for _ in range(INIT_DRAIN_LINES_MAX):
-                if not port.readline():
+            for _ in range(self.init_timing.drain_lines_max):
+                raw_line = port.readline()
+                if not raw_line:
                     break
+                line_text = raw_line.decode("ascii", errors="ignore").strip()
+                if reply_line is None and line_text.startswith(
+                    COMMAND_REPLY_PREFIX
+                ):
+                    reply_line = line_text
         finally:
             port.timeout = read_timeout_prev
+        return reply_line
 
     def apply_init_commands(
-        self, save_to_flash: bool = False
+        self,
+        save_to_flash: bool = False,
+        init_commands: Optional[List[str]] = None,
     ) -> Iterator[str]:
         """Send the start-up sequence, yielding one progress line each.
 
         save_to_flash defaults to False because the settings survive in flash
         once written, and rewriting identical config on every run only spends
         the module's limited flash endurance.
+
+        A missing reply is reported, not raised: the drain window is only a
+        few lines, so a reply can be pushed out by streaming NMEA.
         """
         port = self._require_port()
         port.reset_input_buffer()
-        commands = list(MODULE_INIT_COMMANDS)
+        if init_commands is None:
+            commands = list(MODULE_INIT_COMMANDS)
+        else:
+            commands = list(init_commands)
         if save_to_flash:
             commands.append(SAVECONFIG_COMMAND)
         command_total = len(commands)
         for command_idx, command_text in enumerate(commands, start=1):
             self.send_command(command_text)
-            self._drain_responses()
+            reply_line = self._drain_responses()
             if command_text == SAVECONFIG_COMMAND:
-                time.sleep(INIT_SAVECONFIG_SETTLE_S)
+                time.sleep(self.init_timing.saveconfig_settle_s)
             else:
-                time.sleep(INIT_CMD_DELAY_S)
-            yield f"{command_idx}/{command_total} {command_text}"
+                time.sleep(self.init_timing.cmd_delay_s)
+            if reply_line is None:
+                reply_text = "no response seen"
+            else:
+                reply_text = reply_status_text(reply_line)
+            yield (
+                f"{command_idx}/{command_total} {command_text}"
+                f" -> {reply_text}"
+            )
 
     def read_sentence(self) -> Optional[str]:
         """Return one sentence, or None when the read timed out."""
@@ -149,10 +202,16 @@ class UM982:
             sentence = self.read_sentence()
             if sentence is None:
                 empty_read_count += 1
-                if empty_read_count >= EMPTY_READ_LIMIT:
+                # 0 disables the limit so a bench can wait for a late
+                # power-up instead of exiting.
+                limit_reached = (
+                    self.empty_read_limit > 0
+                    and empty_read_count >= self.empty_read_limit
+                )
+                if limit_reached:
                     raise UM982ReadError(
                         "no data after "
-                        f"{EMPTY_READ_LIMIT} reads; check the cable"
+                        f"{self.empty_read_limit} reads; check the cable"
                     )
                 continue
             empty_read_count = 0

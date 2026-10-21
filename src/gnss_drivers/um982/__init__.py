@@ -5,6 +5,7 @@ from gnss_drivers.um982.driver import (
     DEFAULT_READ_TIMEOUT_S,
     MODULE_INIT_COMMANDS,
     UM982,
+    InitTiming,
     UM982ReadError,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "DEFAULT_READ_TIMEOUT_S",
     "MODULE_INIT_COMMANDS",
     "UM982",
+    "InitTiming",
     "UM982ReadError",
 ]
