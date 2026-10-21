@@ -86,18 +86,18 @@ def test_float_fields_accept_toml_integers(tmp_path):
 def test_init_commands_replace_default_list(tmp_path):
     config_path = write_config(
         tmp_path,
-        '[init]\ncommands = ["UNLOGCOM", "CONFIG HEADING LENGTH 150"]\n',
+        '[init]\ncommands = ["UNLOG", "CONFIG HEADING LENGTH 150"]\n',
     )
     config, _ = load_config_file(config_path)
-    assert config.init_commands == ["UNLOGCOM", "CONFIG HEADING LENGTH 150"]
+    assert config.init_commands == ["UNLOG", "CONFIG HEADING LENGTH 150"]
 
 
 @pytest.mark.parametrize(
     "command_list, error_text",
     [
-        (["UNLOGCOM", "SAVECONFIG"], "must not contain SAVECONFIG"),
-        (["UNLOGCOM", " saveconfig "], "must not contain SAVECONFIG"),
-        (["UNLOGCOM", "  "], "blank entry"),
+        (["UNLOG", "SAVECONFIG"], "must not contain SAVECONFIG"),
+        (["UNLOG", " saveconfig "], "must not contain SAVECONFIG"),
+        (["UNLOG", "  "], "blank entry"),
         ([], "must not be empty"),
     ],
 )

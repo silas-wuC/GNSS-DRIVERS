@@ -65,7 +65,7 @@ def test_default_init_sends_module_commands_in_order():
 def test_init_commands_override_replaces_default_list():
     fake_port = FakeSerialPort()
     receiver = make_receiver(fake_port)
-    custom_commands = ["UNLOGCOM", "CONFIG HEADING LENGTH 150"]
+    custom_commands = ["UNLOG", "CONFIG HEADING LENGTH 150"]
     list(receiver.apply_init_commands(init_commands=custom_commands))
     assert fake_port.written_commands == custom_commands
 
@@ -75,10 +75,10 @@ def test_save_to_flash_appends_saveconfig_last():
     receiver = make_receiver(fake_port)
     list(
         receiver.apply_init_commands(
-            save_to_flash=True, init_commands=["UNLOGCOM"]
+            save_to_flash=True, init_commands=["UNLOG"]
         )
     )
-    assert fake_port.written_commands == ["UNLOGCOM", SAVECONFIG_COMMAND]
+    assert fake_port.written_commands == ["UNLOG", SAVECONFIG_COMMAND]
 
 
 def test_progress_line_reports_module_reply():
@@ -86,23 +86,23 @@ def test_progress_line_reports_module_reply():
     fake_port = FakeSerialPort(
         [
             b"$GNTHS,,V*10\r\n",
-            b"$command,UNLOGCOM,response: OK*5C\r\n",
+            b"$command,UNLOG,response: OK*01\r\n",
         ]
     )
     receiver = make_receiver(fake_port)
     progress_lines = list(
-        receiver.apply_init_commands(init_commands=["UNLOGCOM"])
+        receiver.apply_init_commands(init_commands=["UNLOG"])
     )
-    assert progress_lines == ["1/1 UNLOGCOM -> response: OK"]
+    assert progress_lines == ["1/1 UNLOG -> response: OK"]
 
 
 def test_progress_line_flags_missing_reply():
     fake_port = FakeSerialPort([b"$GNTHS,,V*10\r\n"])
     receiver = make_receiver(fake_port)
     progress_lines = list(
-        receiver.apply_init_commands(init_commands=["UNLOGCOM"])
+        receiver.apply_init_commands(init_commands=["UNLOG"])
     )
-    assert progress_lines == ["1/1 UNLOGCOM -> no response seen"]
+    assert progress_lines == ["1/1 UNLOG -> no response seen"]
 
 
 def test_reply_status_text_strips_echo_and_checksum():

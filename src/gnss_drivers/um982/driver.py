@@ -20,19 +20,23 @@ SAVECONFIG_COMMAND = "SAVECONFIG"
 # Unicore N4 receivers echo each command as "$command,<text>,response: OK".
 COMMAND_REPLY_PREFIX = "$command,"
 
+# Syntax follows the Unicore N4 commands manual R1.15. Log requests must use
+# the GP prefix whatever talker the output carries, and leave out the port so
+# the output goes to the port the command arrived on.
 # KSXT is enabled but not parsed yet; it is left on so --dump can capture a
 # real sample to write the parser against. Drop it once that is done.
 MODULE_INIT_COMMANDS: List[str] = [
-    "UNLOGCOM",
-    "CONFIG MODE UAV",
+    "UNLOG",
+    "MODE ROVER UAV",
     "CONFIG HEADING FIXLENGTH",
-    "CONFIG NMEA GGA ONCHANGED 0.05",
-    "CONFIG NMEA RMC ONCHANGED 0.05",
-    "CONFIG NMEA THS ONCHANGED 0.05",
-    "CONFIG NMEA VTG ONCHANGED 0.05",
-    "CONFIG NMEA GSV ONCHANGED 1",
-    "CONFIG NMEA GSA ONCHANGED 1",
-    "CONFIG NMEA GST ONCHANGED 1",
+    "CONFIG SMOOTH HEADING 0",
+    "GPGGA 0.05",
+    "GPRMC 0.05",
+    "GPTHS 0.05",
+    "GPVTG 0.05",
+    "GPGSV 1",
+    "GPGSA 1",
+    "GPGST 1",
     "KSXT 0.05",
 ]
 

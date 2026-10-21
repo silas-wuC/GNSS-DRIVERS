@@ -38,22 +38,28 @@ drain_read_timeout_s = 0.05
 commands = [
     # Clear the output list restored from flash, or new settings stack
     # on top of old ones and every power-up behaves differently.
-    "UNLOGCOM",
-    "CONFIG MODE UAV",
+    "UNLOG",
+    "MODE ROVER UAV",
     # The two antennas are rigidly mounted at a constant distance.
     "CONFIG HEADING FIXLENGTH",
     # Fixed baseline in cm between ANT1 and ANT2 phase centres, e.g. a
     # 1.5 m bar. Measure centre to centre, not the bar length.
     # "CONFIG HEADING LENGTH 150",
-    # ONCHANGED takes the output period in seconds: 0.05 = 20 Hz.
-    "CONFIG NMEA GGA ONCHANGED 0.05",
-    "CONFIG NMEA RMC ONCHANGED 0.05",
-    "CONFIG NMEA THS ONCHANGED 0.05",
-    "CONFIG NMEA VTG ONCHANGED 0.05",
-    # Diagnostics at 1 Hz; all at 20 Hz would fill ~70% of 230400 baud.
-    "CONFIG NMEA GSV ONCHANGED 1",
-    "CONFIG NMEA GSA ONCHANGED 1",
-    "CONFIG NMEA GST ONCHANGED 1",
+    # Some vendor configs save a smoothing level, which makes the heading
+    # lag behind a rotation; 0 switches it off whatever flash holds.
+    "CONFIG SMOOTH HEADING 0",
+    # Log requests take the GP prefix whatever talker the output carries,
+    # and no port so they go to the port the command came in on.
+    # The number is the output period in seconds: 0.05 = 20 Hz.
+    "GPGGA 0.05",
+    "GPRMC 0.05",
+    "GPTHS 0.05",
+    "GPVTG 0.05",
+    # Diagnostics at 1 Hz. GSV repeats per constellation and per signal,
+    # so at 10 Hz under open sky it alone can outrun 230400 baud.
+    "GPGSV 1",
+    "GPGSA 1",
+    "GPGST 1",
     # Vendor sentence, enabled but not parsed yet.
     "KSXT 0.05",
 ]
