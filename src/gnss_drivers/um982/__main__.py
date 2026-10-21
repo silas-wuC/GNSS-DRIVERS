@@ -9,7 +9,7 @@ import serial
 from gnss_drivers.fix import format_fix_line
 from gnss_drivers.nmea import PARSED_SENTENCE_NAMES, update_fix_from_sentence
 from gnss_drivers.serial_port import list_serial_ports
-from gnss_drivers.um982 import (
+from gnss_drivers.um982.driver import (
     DEFAULT_BAUD_RATE,
     UM982,
     UM982ReadError,
