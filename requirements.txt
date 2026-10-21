@@ -1,0 +1,4 @@
+# Keep in sync with [project] dependencies in pyproject.toml.
+pyserial>=3.5
+# tomllib joined the standard library in Python 3.11.
+tomli>=2.0; python_version < "3.11"
