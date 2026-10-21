@@ -160,24 +160,49 @@ commands = [
 
 ### 狀態行
 
-一行原地刷新（`\r` 覆寫）：
+一行原地刷新（`\r` 覆寫，補空白到目前最長那一行的長度，蓋掉上一行的殘留）：
 
 ```
-UTC 06:21:33.000  LAT 25.062431  LON 121.581187  ALT_MSL 45.1 m  ALT_HAE 62.6 m  SATS 28  HDOP 0.7  VDOP 1.0  YAW 123.5
+UTC 06:21:33.000  RTK FIXED  LAT 25.062431  LON 121.581187  ALT_MSL 45.1 m  ALT_HAE 62.6 m  SATS 28  HDOP 0.7  VDOP 1.0  YAW 123.5  HDG FIXED  ANT2 21
 ```
+
+一行約 145 字元。終端比這窄會折行，折行後 `\r` 只回到最後一行開頭，畫面變成一行行往下刷 —— 把終端拉寬即可。
 
 | 欄位 | 單位 | 來源 | 顯示 `--` 的原因 |
 |---|---|---|---|
 | `UTC` | HH:MM:SS.sss | GGA 第 1 欄 | 還沒收到 GGA |
+| `RTK` | **ANT1 相對基站**的解算品質：`NONE`／`SINGLE`／`DGPS`／`PPS`／`FIXED`／`FLOAT`／`DR`／`MANUAL`／`SIM` | GGA 第 6 欄（手冊表 7-4：4＝固定、5＝浮點） | 還沒收到 GGA |
 | `LAT` / `LON` | 度（十進位，南緯／西經為負），6 位小數 | GGA 第 2–5 欄 | 解算品質 0（無定位），舊座標會被清掉 |
 | `ALT_MSL` | m，海拔高 | GGA 第 9 欄 | 無定位 |
 | `ALT_HAE` | m，WGS84 橢球高＝海拔高＋大地水準面差距 | GGA 第 9＋11 欄 | 無定位，或模組沒輸出第 11 欄 |
 | `SATS` | 顆，解算使用的衛星數 | GGA 第 7 欄 | 還沒收到 GGA |
 | `HDOP` | — | GGA 第 8 欄，GSA 到了會覆蓋 | 還沒收到 GGA／GSA |
 | `VDOP` | — | GSA | 還沒收到 GSA（1 Hz，啟動後最多等 1 秒） |
-| `YAW` | 度，真北順時針，ANT1→ANT2 | THS | THS 狀態 `V`：只接 ANT1、heading 未收斂或遮擋，**不是故障** |
+| `YAW` | 度，真北順時針，ANT1→ANT2 | THS | THS 狀態 `V`：只接 ANT1、heading 未收斂或遮擋，**不是故障**；看 `HDG`、`ANT2` 判斷是哪一種 |
+| `HDG` | **ANT1 相對 ANT2** 的航向解算品質：`NONE`／`SINGLE`／`FLOAT`／`FIXED` | KSXT 第 11 欄（手冊表 7-107 的 ID 12：3＝固定、2＝浮點，**跟 GGA 編號不同**） | 還沒收到 KSXT；`commands` 拿掉 `KSXT` 就一直是 `--` |
+| `ANT2` | 顆，從天線參與解算的衛星數 | KSXT 第 12 欄（手冊 ID 13） | 同 `HDG` |
+
+表裡沒列的品質碼（新固件可能新增）原樣顯示成 `Q<數字>`，不猜名字。
 
 無定位時 `UTC`、`SATS`、`HDOP` 照常更新：GGA 在沒定位時仍帶時間和衛星數。
+
+### `RTK` 與 `HDG` 是兩套獨立的差分
+
+| | `RTK` | `HDG` |
+|---|---|---|
+| 差分的兩端 | ANT1 ↔ **基站**（RTCM 改正數） | ANT1 ↔ **ANT2**（模組內部，移動基線） |
+| 需要什麼 | 外部基站或 NTRIP 的 RTCM 改正數送進模組 | 兩根天線都看得到星，不需要基站 |
+| 決定什麼 | 位置精度（單點約米級，固定解約厘米級） | 航向能不能出、準不準 |
+| 本驅動 | **不轉發 RTCM**，沒有外部改正數時 `RTK` 停在 `SINGLE`（或 SBAS 的 `DGPS`），正常 | 開機即可解算 |
+
+兩者互不依賴：手冊表 7-107 的 KSXT 範例就是位置品質 1（單點）、航向品質 3（固定）。所以 `RTK SINGLE` 但 `HDG FIXED` 是常態，航向照樣可用。
+
+| 看到 | 意思 |
+|---|---|
+| `YAW --  HDG NONE  ANT2 0` | ANT2 一顆星都沒解到：天線線材、接頭或遮擋，先查 ANT2 |
+| `YAW --  HDG NONE  ANT2 >0` | ANT2 有星但航向還沒解出來：剛開機或剛遮擋後在收斂 |
+| `YAW 123.4  HDG FLOAT` | 航向有值但模糊度沒固定，精度明顯差於 `FIXED`，別拿來當真值 |
+| `YAW 123.4  HDG FIXED` | 航向固定解，可用 |
 
 ### 其他訊息
 
@@ -227,7 +252,7 @@ with UM982("COM29") as receiver:
 | `send_command(command_text)` | 送一條指令，自動補 `\r\n` |
 | `apply_init_commands(save_to_flash=False, init_commands=None)` | **generator**，每送一條 yield 一行進度。**不迭代就一條都不會送**。`init_commands=None` 用 `MODULE_INIT_COMMANDS`；`save_to_flash=True` 在尾巴加 `SAVECONFIG`。任一條被拒或逾時沒回覆就拋 `UM982InitError`，後面的不再送，所以前面失敗時 `SAVECONFIG` 不會寫入 |
 | `read_sentence()` | 讀一行，逾時回 `None` |
-| `read_fixes()` | 無限迴圈，每次 GGA／GSA／THS 更新後 yield。**每次 yield 的是同一個 `GnssFix` 物件**（它代表接收機當前狀態），要保存快照用 `dataclasses.replace(fix)` |
+| `read_fixes()` | 無限迴圈，每次 GGA／GSA／THS／KSXT 更新後 yield。**每次 yield 的是同一個 `GnssFix` 物件**（它代表接收機當前狀態），要保存快照用 `dataclasses.replace(fix)` |
 | `fix` | 目前的 `GnssFix` |
 
 `UM982ReadError`：埠未開就讀，或 `read_fixes()` 連續空讀達上限。
@@ -268,6 +293,9 @@ receiver = UM982(
 | `sats_used` | `Optional[int]` | 顆 | GGA |
 | `hdop` / `vdop` | `Optional[float]` | — | GGA／GSA |
 | `yaw_deg` | `Optional[float]` | 度 | THS，狀態 `V` 時 `None` |
+| `position_quality` | `Optional[int]` | GGA 品質碼 | GGA 第 6 欄，原始數字；名稱見 `fix.POSITION_QUALITY_NAMES` |
+| `heading_quality` | `Optional[int]` | KSXT 航向品質碼 | KSXT 第 11 欄，原始數字；名稱見 `fix.HEADING_QUALITY_NAMES`。**編號跟 `position_quality` 不同，不能互相比較** |
+| `ant2_sats_used` | `Optional[int]` | 顆 | KSXT 第 12 欄 |
 
 ### 模組常數（`driver.py`，即上述參數的預設值）
 
@@ -341,11 +369,11 @@ receiver = UM982(
 | `VTG` | 對地航跡角與速度 | ⬜ 已開啟未解析 |
 | `GSV` | 可見衛星清單與 SNR | ⬜ 已開啟未解析 |
 | `GST` | 偽距誤差統計（位置標準差） | ⬜ 已開啟未解析 |
-| `KSXT` | 廠商專有句：位置＋航向＋速度＋解狀態＋標準差 | ⚠️ 已開啟未解析 |
+| `KSXT` | 廠商專有句：位置＋航向＋速度＋位置／航向解算品質＋兩根天線的衛星數 | ✅ 部分解析（只取航向品質、ANT2 衛星數；航向和位置仍以 THS、GGA 為準） |
 
 ### 已知限制
 
-- **`KSXT` 已開啟輸出但尚未解析**，20 Hz × 約 130 bytes ≈ 26 kbps 白白浪費。刻意保留是為了能用 `dump` 抓到實物語句，照著寫 parser；欄位定義必須對照官方手冊，猜不得。確定不用就從 `commands` 移除。
+- **`KSXT` 只解析了航向品質和 ANT2 衛星數**（欄位定義照手冊 R1.15 表 7-107，測試用的是實機抓的語句）。它的航向、位置、速度沒用，因為 THS、GGA 已經給了，兩句搶同一個欄位只會互相覆蓋。從 `commands` 拿掉 `KSXT` 可省約 26 kbps，代價是 `HDG`、`ANT2` 變成 `--`。
 - **`ALT_HAE` 依賴 GGA 第 11 欄的大地水準面差距**，模組未輸出該欄時顯示 `--`（`ALT_MSL` 仍正常）。實測本模組有輸出，差值約 18.9 m。
 - **雙天線 heading 需要收斂時間**，冷啟動或遮擋後重新收斂期間 THS 回 `V`。
 - **基線長度**：`FIXLENGTH` 只宣告「長度固定」，不帶長度值。手冊另有 `CONFIG HEADING LENGTH <基線> <容差>`，預設清單**不含**這條（基線是台架屬性，不是模組屬性），各台架在自己的 `um982.toml` 加，見「固定基線配置」。
