@@ -20,8 +20,6 @@ from gnss_drivers.um982.config import (
 )
 from gnss_drivers.um982.driver import UM982, UM982InitError, UM982ReadError
 
-STATUS_LINE_PAD_CHARS = 24
-
 
 def print_serial_ports() -> None:
     port_rows = list_serial_ports()
@@ -143,6 +141,7 @@ def run_read_loop(receiver: UM982, config: UM982Config) -> None:
     started_at_s = time.monotonic()
     warned_about_silence = False
     empty_read_count = 0
+    longest_status_chars = 0
     while True:
         sentence = receiver.read_sentence()
         if sentence is None:
@@ -178,7 +177,11 @@ def run_read_loop(receiver: UM982, config: UM982Config) -> None:
                 print("\nDUMP " + sentence_name + ": " + sentence[:80])
             continue
         status_line = format_fix_line(receiver.fix)
-        sys.stdout.write("\r" + status_line + (" " * STATUS_LINE_PAD_CHARS))
+        # \r only moves the cursor, so pad to the longest line so far to
+        # wipe the tail of a longer one. A fixed pad pushed the line past
+        # narrower terminals, and a wrapped line redraws on a new row.
+        longest_status_chars = max(longest_status_chars, len(status_line))
+        sys.stdout.write("\r" + status_line.ljust(longest_status_chars))
         sys.stdout.flush()
 
 
