@@ -8,6 +8,40 @@ def test_empty_fix_formats_placeholders():
     assert "LAT --" in line
     assert "SATS --" in line
     assert "YAW --" in line
+    assert "RTK --" in line
+    assert "HDG --" in line
+    assert "ANT2 --" in line
+
+
+def test_status_line_shows_rtk_and_heading_state():
+    fix = GnssFix(
+        position_quality=4, yaw_deg=299.22, heading_quality=3,
+        ant2_sats_used=46,
+    )
+    line = format_fix_line(fix)
+    assert "RTK FIXED" in line
+    assert "YAW 299.2  HDG FIXED  ANT2 46" in line
+
+
+@pytest.mark.parametrize(
+    "position_quality, heading_quality, expected_texts",
+    [
+        (5, 2, ["RTK FLOAT", "HDG FLOAT"]),
+        (0, 0, ["RTK NONE", "HDG NONE"]),
+        (1, 1, ["RTK SINGLE", "HDG SINGLE"]),
+        # GGA 4 is fixed, but KSXT has no 4; the two tables must not mix.
+        (4, 4, ["RTK FIXED", "HDG Q4"]),
+    ],
+)
+def test_quality_tables_follow_their_own_numbering(
+    position_quality, heading_quality, expected_texts
+):
+    fix = GnssFix(
+        position_quality=position_quality, heading_quality=heading_quality
+    )
+    line = format_fix_line(fix)
+    for expected_text in expected_texts:
+        assert expected_text in line
 
 
 def test_format_optional_number_rounds_and_placeholders():

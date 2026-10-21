@@ -1,7 +1,7 @@
 """Receiver state shared by all NMEA sentence parsers."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional
 
 
 @dataclass
@@ -45,6 +45,40 @@ class GnssFix:
         self.alt_hae_m = None
 
 
+# GGA quality indicator, Unicore N4 manual Table 7-4.
+POSITION_QUALITY_NAMES: Dict[int, str] = {
+    0: "NONE",
+    1: "SINGLE",
+    2: "DGPS",
+    3: "PPS",
+    4: "FIXED",
+    5: "FLOAT",
+    6: "DR",
+    7: "MANUAL",
+    8: "SIM",
+}
+# KSXT heading quality, manual Table 7-107. Not the GGA numbering: here
+# 3 is fixed and 2 is float.
+HEADING_QUALITY_NAMES: Dict[int, str] = {
+    0: "NONE",
+    1: "SINGLE",
+    2: "FLOAT",
+    3: "FIXED",
+}
+
+
+def format_quality(
+    quality_code: Optional[int], quality_names: Dict[int, str]
+) -> str:
+    if quality_code is None:
+        return "--"
+    if quality_code in quality_names:
+        return quality_names[quality_code]
+    # A code missing from the manual table, e.g. from newer firmware, is
+    # shown raw instead of being dropped or given a wrong name.
+    return "Q" + str(quality_code)
+
+
 def format_optional_number(value: Optional[float], decimal_digits: int) -> str:
     if value is None:
         return "--"
@@ -60,8 +94,19 @@ def format_fix_line(fix: GnssFix) -> str:
         sats_text = "--"
     else:
         sats_text = str(fix.sats_used)
+    if fix.ant2_sats_used is None:
+        ant2_sats_text = "--"
+    else:
+        ant2_sats_text = str(fix.ant2_sats_used)
+    position_quality_text = format_quality(
+        fix.position_quality, POSITION_QUALITY_NAMES
+    )
+    heading_quality_text = format_quality(
+        fix.heading_quality, HEADING_QUALITY_NAMES
+    )
     return (
         f"UTC {utc_text}"
+        f"  RTK {position_quality_text}"
         f"  LAT {format_optional_number(fix.lat_deg, 6)}"
         f"  LON {format_optional_number(fix.lon_deg, 6)}"
         f"  ALT_MSL {format_optional_number(fix.alt_msl_m, 1)} m"
@@ -70,4 +115,6 @@ def format_fix_line(fix: GnssFix) -> str:
         f"  HDOP {format_optional_number(fix.hdop, 1)}"
         f"  VDOP {format_optional_number(fix.vdop, 1)}"
         f"  YAW {format_optional_number(fix.yaw_deg, 1)}"
+        f"  HDG {heading_quality_text}"
+        f"  ANT2 {ant2_sats_text}"
     )
