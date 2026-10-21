@@ -1,0 +1,59 @@
+# UM982 reader settings. Copy to ./um982.toml (git-ignored) and edit.
+# Every value below equals the code default; delete a line to fall back
+# to it. Command-line flags override anything set here.
+
+[serial]
+# Empty lists the available ports and exits.
+port = ""
+# A factory-fresh module talks 115200; switch it with CONFIG COM1 230400
+# first, or set 115200 here for the first connection.
+baud = 230400
+# One readline() wait. Also the unit of run.empty_read_limit.
+read_timeout_s = 1.0
+
+[run]
+# Print the first sample of every sentence type the parser ignores.
+dump = false
+# false skips the whole init sequence, including save_config.
+init = true
+# Append SAVECONFIG to the init sequence. Flash endurance is limited, so
+# run this once after changing init.commands, not on every start.
+save_config = false
+# Warn about a likely baud mismatch after this long without valid NMEA.
+no_data_warn_after_s = 5.0
+# Exit after this many consecutive empty reads (x read_timeout_s).
+# 0 waits forever, e.g. for a module that is powered up later.
+empty_read_limit = 10
+
+[init]
+# Pause after each command so replies do not pile into the next one.
+cmd_delay_s = 0.08
+# SAVECONFIG writes flash and needs longer before the next command.
+saveconfig_settle_s = 0.35
+# Lines read back after each command while looking for its reply.
+drain_lines_max = 3
+drain_read_timeout_s = 0.05
+# Sent in order on every start. SAVECONFIG is rejected here; use
+# run.save_config instead.
+commands = [
+    # Clear the output list restored from flash, or new settings stack
+    # on top of old ones and every power-up behaves differently.
+    "UNLOGCOM",
+    "CONFIG MODE UAV",
+    # The two antennas are rigidly mounted at a constant distance.
+    "CONFIG HEADING FIXLENGTH",
+    # Fixed baseline in cm between ANT1 and ANT2 phase centres, e.g. a
+    # 1.5 m bar. Measure centre to centre, not the bar length.
+    # "CONFIG HEADING LENGTH 150",
+    # ONCHANGED takes the output period in seconds: 0.05 = 20 Hz.
+    "CONFIG NMEA GGA ONCHANGED 0.05",
+    "CONFIG NMEA RMC ONCHANGED 0.05",
+    "CONFIG NMEA THS ONCHANGED 0.05",
+    "CONFIG NMEA VTG ONCHANGED 0.05",
+    # Diagnostics at 1 Hz; all at 20 Hz would fill ~70% of 230400 baud.
+    "CONFIG NMEA GSV ONCHANGED 1",
+    "CONFIG NMEA GSA ONCHANGED 1",
+    "CONFIG NMEA GST ONCHANGED 1",
+    # Vendor sentence, enabled but not parsed yet.
+    "KSXT 0.05",
+]

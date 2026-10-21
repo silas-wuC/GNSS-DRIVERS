@@ -31,6 +31,9 @@ wheels/
 *.nmea
 *.ubx
 
+# Per-bench UM982 settings; the template is um982.example.toml
+um982.toml
+
 # OS generated files
 .DS_Store
 Thumbs.db

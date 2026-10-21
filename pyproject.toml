@@ -8,7 +8,11 @@ name = "gnss-drivers"
 version = "0.1.0"
 description = "Experiment-bench GNSS drivers, starting with the Unicore UM982"
 requires-python = ">=3.10"
-dependencies = ["pyserial>=3.5"]
+dependencies = [
+    "pyserial>=3.5",
+    # tomllib joined the standard library in Python 3.11.
+    "tomli>=2.0; python_version < '3.11'",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
