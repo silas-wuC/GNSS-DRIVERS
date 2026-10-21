@@ -3,10 +3,13 @@ import pytest
 from conftest import (
     GGA_NO_FIX,
     GGA_RTK_FIXED,
+    GGA_SINGLE,
     GSA_ALL_SLOTS_USED,
     GSA_WITH_SYSTEM_ID,
     GSA_WITHOUT_SYSTEM_ID,
+    KSXT_HEADING_FIXED,
     KSXT_NO_HEADING,
+    RMC_SENTENCE,
     THS_INVALID,
     THS_VALID,
 )
@@ -64,9 +67,51 @@ def test_ths_invalid_status_clears_stale_heading():
     assert fix.yaw_deg is None
 
 
+@pytest.mark.parametrize(
+    "sentence, expected_quality",
+    [(GGA_NO_FIX, 0), (GGA_SINGLE, 1), (GGA_RTK_FIXED, 4)],
+)
+def test_gga_records_position_quality(sentence, expected_quality):
+    fix = GnssFix()
+    update_fix_from_sentence(sentence, fix)
+    assert fix.position_quality == expected_quality
+
+
+def test_ksxt_reports_fixed_heading_and_ant2_satellites():
+    fix = GnssFix()
+    assert update_fix_from_sentence(KSXT_HEADING_FIXED, fix) == "KSXT"
+    assert fix.heading_quality == 3
+    assert fix.ant2_sats_used == 46
+
+
+def test_ksxt_without_heading_shows_ant2_saw_nothing():
+    fix = GnssFix()
+    update_fix_from_sentence(KSXT_NO_HEADING, fix)
+    assert fix.heading_quality == 0
+    assert fix.ant2_sats_used == 0
+
+
+def test_ksxt_leaves_heading_and_position_to_ths_and_gga():
+    # KSXT carries a heading and a position too; taking them would
+    # let two sentences fight over the same fields every epoch.
+    fix = GnssFix()
+    update_fix_from_sentence(KSXT_HEADING_FIXED, fix)
+    assert fix.yaw_deg is None
+    assert fix.lat_deg is None
+    assert fix.position_quality is None
+
+
+def test_truncated_ksxt_changes_nothing():
+    truncated_ksxt = "$KSXT,20261021094631.60,121.45666133*2B"
+    fix = GnssFix()
+    # A valid checksum makes this reach the length guard in parse_ksxt.
+    assert update_fix_from_sentence(truncated_ksxt, fix) == "KSXT"
+    assert fix == GnssFix()
+
+
 def test_known_but_unparsed_sentence_leaves_fix_untouched():
     fix = GnssFix()
-    assert update_fix_from_sentence(KSXT_NO_HEADING, fix) == "KSXT"
+    assert update_fix_from_sentence(RMC_SENTENCE, fix) == "RMC"
     assert fix == GnssFix()
 
 

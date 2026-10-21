@@ -9,6 +9,11 @@ GGA_RTK_FIXED = (
     "45.123,M,17.456,M,1.0,0000*66"
 )
 GGA_NO_FIX = "$GNGGA,062134.000,,,,,0,04,99.99,,M,,M,,*4E"
+# Captured from a UM982 R4.10Build13495: single-point, quality 1.
+GGA_SINGLE = (
+    "$GNGGA,094631.60,2459.90046539,N,12127.39967995,E,1,15,1.3,"
+    "36.6279,M,18.9136,M,,*4E"
+)
 # NMEA 4.10 appends system_id, NMEA 2.3 does not; DOP offsets must match.
 GSA_WITH_SYSTEM_ID = (
     "$GNGSA,A,3,03,09,17,19,22,23,31,32,,,,,1.20,0.70,0.98,1*02"
@@ -41,11 +46,16 @@ KSXT_NO_HEADING = (
     "$KSXT,20261021094631.60,121.45666133,24.99834109,36.6279,0.00,"
     "0.00,199.17,0.918,0.00,1,0,0,15,,,,-0.301,-0.867,0.161,,*36"
 )
+# Example from the same manual table: heading quality 3 (RTK fixed),
+# 46 satellites on ANT2.
+KSXT_HEADING_FIXED = (
+    "$KSXT,20190909084745.00,116.23662400,40.07897925,68.3830,299.22,"
+    "-67.03,190.28,0.022,,1,3,46,28,,,,-0.004,-0.021,-0.020,,*27"
+)
 
 UNPARSED_SENTENCES = [
     RMC_SENTENCE,
     VTG_SENTENCE,
     GST_SENTENCE,
     GSV_SENTENCE,
-    KSXT_NO_HEADING,
 ]

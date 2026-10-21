@@ -9,9 +9,9 @@ class GnssFix:
     """Latest known receiver state.
 
     A single NMEA sentence never carries a complete fix: GGA brings
-    position, GSA brings DOP, THS brings heading. Parsers therefore update
-    this object in place and callers read whatever the receiver has said so
-    far.
+    position, GSA brings DOP, THS brings heading, KSXT brings heading
+    quality. Parsers therefore update this object in place and callers read
+    whatever the receiver has said so far.
     """
 
     utc_text: Optional[str] = None
@@ -23,6 +23,15 @@ class GnssFix:
     hdop: Optional[float] = None
     vdop: Optional[float] = None
     yaw_deg: Optional[float] = None
+    # GGA quality indicator, Unicore N4 manual Table 7-4: 4 = RTK fixed,
+    # 5 = RTK float.
+    position_quality: Optional[int] = None
+    # KSXT heading quality, manual Table 7-107: 3 = RTK fixed, 2 = RTK
+    # float. The numbering differs from GGA, so never compare the two.
+    heading_quality: Optional[int] = None
+    # Satellites the ANT2 (slave) solution uses; 0 explains a missing
+    # heading before anyone suspects the firmware.
+    ant2_sats_used: Optional[int] = None
 
     def clear_position(self) -> None:
         """Drop position while keeping time and satellite bookkeeping.

@@ -17,7 +17,12 @@ GSA_SAT_SLOT_COUNT = 12
 PROPRIETARY_SENTENCE_NAMES = frozenset({"KSXT"})
 
 # Sentence names this module understands well enough to update a fix.
-PARSED_SENTENCE_NAMES = frozenset({"GGA", "GSA", "THS"})
+PARSED_SENTENCE_NAMES = frozenset({"GGA", "GSA", "THS", "KSXT"})
+
+# Unicore N4 manual Table 7-107 numbers KSXT fields from 1 at the $KSXT
+# header, so field ID n sits at list index n - 1.
+KSXT_HEADING_QUALITY_FIELD_IDX = 11
+KSXT_ANT2_SATS_FIELD_IDX = 12
 
 
 def checksum_ok(sentence: str) -> bool:
@@ -116,6 +121,7 @@ def parse_gga(fields: List[str], fix: GnssFix) -> None:
     if fields[8]:
         fix.hdop = parse_optional_float(fields[8])
     quality = parse_optional_int(fields[6])
+    fix.position_quality = quality
     if quality is None or quality == 0:
         fix.clear_position()
         return
@@ -162,6 +168,22 @@ def parse_ths(fields: List[str], fix: GnssFix) -> None:
     fix.yaw_deg = parse_optional_float(fields[1])
 
 
+def parse_ksxt(fields: List[str], fix: GnssFix) -> None:
+    """$KSXT,utc,lon,lat,alt,heading,pitch,track,vel,roll,posqual,
+    headingqual,ant2_sats,ant1_sats,...
+
+    Only the heading quality and the ANT2 satellite count are taken. THS
+    already carries the heading, but its A/V flag cannot tell a fixed
+    heading from a float one, nor say why the heading is missing.
+    """
+    if len(fields) <= KSXT_ANT2_SATS_FIELD_IDX:
+        return
+    fix.heading_quality = parse_optional_int(
+        fields[KSXT_HEADING_QUALITY_FIELD_IDX]
+    )
+    fix.ant2_sats_used = parse_optional_int(fields[KSXT_ANT2_SATS_FIELD_IDX])
+
+
 def update_fix_from_sentence(sentence: str, fix: GnssFix) -> Optional[str]:
     """Apply one sentence to the fix.
 
@@ -182,4 +204,6 @@ def update_fix_from_sentence(sentence: str, fix: GnssFix) -> Optional[str]:
         parse_gsa(fields, fix)
     elif sentence_name == "THS":
         parse_ths(fields, fix)
+    elif sentence_name == "KSXT":
+        parse_ksxt(fields, fix)
     return sentence_name
