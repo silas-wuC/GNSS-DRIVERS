@@ -45,9 +45,12 @@ commands = [
     "MODE ROVER UAV",
     # The two antennas are rigidly mounted at a constant distance.
     "CONFIG HEADING FIXLENGTH",
-    # Fixed baseline in cm between ANT1 and ANT2 phase centres, e.g. a
-    # 1.5 m bar. Measure centre to centre, not the bar length.
-    # "CONFIG HEADING LENGTH 150",
+    # Fixed baseline and its tolerance, both in cm, between the ANT1 and
+    # ANT2 phase centres, e.g. a 1.5 m bar with 3 cm slack. Firmware
+    # R4.10Build13495 rejects the one-argument form. A wrong baseline can
+    # keep heading from fixing, so take it from the baseline length that
+    # UNIHEADINGA reports once heading is fixed, not from the bar length.
+    # "CONFIG HEADING LENGTH 150 3",
     # Some vendor configs save a smoothing level, which makes the heading
     # lag behind a rotation; 0 switches it off whatever flash holds.
     "CONFIG SMOOTH HEADING 0",

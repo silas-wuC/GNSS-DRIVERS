@@ -76,13 +76,15 @@ python run_um982.py --port COM29     # Windows；Linux／WSL 用 /dev/ttyUSB0
 |---|---|---|---|---|
 | `cmd_delay_s` | `--init-cmd-delay-s` | float | `0.08` | 每條指令送出並讀回覆後的停頓。調太小，回覆會擠進下一條的讀取窗口 |
 | `saveconfig_settle_s` | `--init-saveconfig-settle-s` | float | `0.35` | `SAVECONFIG` 後的停頓，寫 flash 比一般指令慢 |
-| `drain_lines_max` | `--init-drain-lines-max` | int | `3` | 每條指令後最多讀幾行找回覆。模組同時在吐 NMEA，回覆可能被擠出窗口，此時顯示 `no response seen` |
-| `drain_read_timeout_s` | `--init-drain-read-timeout-s` | float | `0.05` | 讀回覆時的單行逾時，必須 > 0 |
+| `reply_timeout_s` | `--init-reply-timeout-s` | float | `5.0` | 每條指令最多等幾秒回覆，必須 > 0。回覆排在模組**已緩衝的輸出後面**，輸出清單超過埠容量時可能積壓好幾秒，所以按時間等、不按行數。逾時或回覆不是 `response: OK` 都會 `Init failed` 並 exit 1 |
+| `drain_read_timeout_s` | `--init-drain-read-timeout-s` | float | `0.05` | 等回覆期間的單行逾時，必須 > 0 |
 | `commands` | **僅 config** | list[str] | 見下表 | 啟動時依序送出的指令。不能為空、不能有空白項、**不能含 `SAVECONFIG`**（改用 `run.save_config`） |
 
 `commands` 不開放命令行：每條指令都含空格，塞進命令行要逐條加引號，錯一個引號整條就拆散。
 
-`commands` 會**整份取代**預設清單，不是追加。要加一條，從範本複製整份再改。第一條請保持 `UNLOGCOM`（原因見下表）。
+`commands` 會**整份取代**預設清單，不是追加。要加一條，從範本複製整份再改。第一條請保持 `UNLOG`（原因見下表）。
+
+⚠️ 舊版範本裡的 `drain_lines_max` 已移除，台架上沿用舊 `um982.toml` 會報 `init.drain_lines_max: unknown key`。這是故意的：舊範本的指令清單整份都是模組不認的寫法（見「排障」），必須從新範本重新複製。
 
 ---
 
@@ -120,22 +122,23 @@ python run_um982.py --no-dump
 
 ## 固定基線配置（1.5 m 長棍）
 
-兩根天線剛性裝在 1.5 m 的桿上時，在 `um982.toml` 的 `[init] commands` 中、`CONFIG HEADING FIXLENGTH` 下面加一行 `CONFIG HEADING LENGTH`：
+兩根天線剛性裝在 1.5 m 的桿上時，在 `um982.toml` 的 `[init] commands` 中把範本裡註解掉的 `CONFIG HEADING LENGTH` 打開：
 
 ```toml
 [init]
 commands = [
-    "UNLOGCOM",
-    "CONFIG MODE UAV",
+    "UNLOG",
+    "MODE ROVER UAV",
     "CONFIG HEADING FIXLENGTH",
-    "CONFIG HEADING LENGTH 150",   # ANT1-ANT2 phase-centre distance, cm
-    "CONFIG NMEA GGA ONCHANGED 0.05",
-    "CONFIG NMEA RMC ONCHANGED 0.05",
-    "CONFIG NMEA THS ONCHANGED 0.05",
-    "CONFIG NMEA VTG ONCHANGED 0.05",
-    "CONFIG NMEA GSV ONCHANGED 1",
-    "CONFIG NMEA GSA ONCHANGED 1",
-    "CONFIG NMEA GST ONCHANGED 1",
+    "CONFIG HEADING LENGTH 150 3",   # baseline 150 cm, tolerance 3 cm
+    "CONFIG SMOOTH HEADING 0",
+    "GPGGA 0.05",
+    "GPRMC 0.05",
+    "GPTHS 0.05",
+    "GPVTG 0.05",
+    "GPGSV 1",
+    "GPGSA 1",
+    "GPGST 1",
     "KSXT 0.05",
 ]
 ```
@@ -144,14 +147,12 @@ commands = [
 
 | 項目 | 說明 |
 |---|---|
-| 指令格式 | Unicore N4 指令手冊：`CONFIG HEADING LENGTH [參數1] [參數2]`，參數 1＝固定基線長度、參數 2＝長度容差，單位 cm，兩者都是選填 |
-| 填多少 | **ANT1 與 ANT2 相位中心的距離**，不是桿長。天線沒裝在桿的兩端就要實量中心到中心。兩根天線同型號、同朝向安裝（接頭朝同一邊），相位中心偏差才會互相抵消 |
-| 容差（參數 2） | 先**不帶**。手冊 R1.15 改過這個參數的取值範圍，沒對照你韌體對應版本的手冊就亂填，模組會拒收 |
-| 有沒有吃進去 | 看啟動的 `Init 3/12 CONFIG HEADING LENGTH 150 -> response: OK`。`no response seen` 不代表失敗（回覆可能被 NMEA 擠出窗口），可調大 `drain_lines_max` 再看；回 `OK` 以外的字串才是被拒 |
+| 指令格式 | `CONFIG HEADING LENGTH <基線> <容差>`，單位 cm（手冊 R1.15 §4.18 Table 4-21）。**R4.10Build13495 實測必須兩個參數都帶**，只帶一個會回 `PARSING FAILED GRAMMAR ERROR,This cmd need two paras,and the second para > 0!` |
+| 填多少 | **ANT1 與 ANT2 相位中心的距離**，不是桿長。最可靠的來源是模組自己解出的基線：室外航向鎖定後讀一次 `UNIHEADINGA`，裡面有基線長度欄。兩根天線同型號、同朝向安裝（接頭朝同一邊），相位中心偏差才會互相抵消 |
+| 容差 | 必須 > 0，手冊範例是 3（cm）。基線填錯或容差太緊，航向可能一直鎖不上，比沒設更糟，所以先拿 `UNIHEADINGA` 的實測值再寫 |
+| 有沒有吃進去 | 啟動時印 `Init 4/13 CONFIG HEADING LENGTH 150 3 -> response: OK`；被拒會直接 `Init failed: ...` 並 exit 1，附模組原話 |
 | 航向定義 | 真北順時針轉到 **ANT1→ANT2 連線** 的角度。桿子若橫裝（左右向），`YAW` 與車頭方向差 ±90°，需在下游自己補償 |
 | 精度預期 | 角度誤差 ≈ 相位誤差 ÷ 基線長。廠規 0.1° @ 1 m 基線，1.5 m 理論約 0.07°；多路徑、桿子形變會吃掉一部分 |
-
-⚠️ 本驅動目前在**沒接板**的環境下完成，`$command,...,response: OK` 回覆格式與 `LENGTH` 參數是依手冊撰寫，**第一次上台架要對照實際回覆確認**。
 
 ---
 
@@ -186,7 +187,9 @@ UTC 06:21:33.000  LAT 25.062431  LON 121.581187  ALT_MSL 45.1 m  ALT_HAE 62.6 m 
 | `Config error: <path>: serial.buad: unknown key` | 設定錯誤，冒號後指出哪個 key；exit 1 |
 | `Warning: save_config ignored because init is off.` | `save_config` 和 `--no-init` 同時出現 |
 | `Failed to open COM29: ...` | 埠不存在、被佔用或權限不足；exit 1 |
-| `Init 3/11 CONFIG HEADING FIXLENGTH -> response: OK` | 第 3／共 11 條指令與模組回覆；`no response seen`＝讀取窗口內沒看到回覆 |
+| `Init 3/12 CONFIG HEADING FIXLENGTH -> response: OK` | 第 3／共 12 條指令被模組接受 |
+| `Init failed: CONFIG MODE UAV: response: PARSING FAILED MISSING FIELD,` | 模組拒收這條指令，冒號後是模組原話；後面的指令不再送，exit 1。之前的指令已生效 |
+| `Init failed: UNLOG: no reply within 5.0 s; check the baud rate` | 等滿 `reply_timeout_s` 沒有回覆，九成是波特率不對；exit 1 |
 | `No valid NMEA yet; check the baud rate (module default is 115200).` | 連續 `no_data_warn_after_s` 秒沒有有效語句 |
 | `DUMP KSXT: $KSXT,...` | `dump` 開啟時，每種未解析語句印一次 |
 | `Read failed: no data after 10 reads; check the cable` | 連續 `empty_read_limit` 次零位元組；exit 1 |
@@ -222,14 +225,16 @@ with UM982("COM29") as receiver:
 |---|---|
 | `open()` / `close()` / `with` | 開關序列埠，`close()` 可重複呼叫 |
 | `send_command(command_text)` | 送一條指令，自動補 `\r\n` |
-| `apply_init_commands(save_to_flash=False, init_commands=None)` | **generator**，每送一條 yield 一行進度。**不迭代就一條都不會送**。`init_commands=None` 用 `MODULE_INIT_COMMANDS`；`save_to_flash=True` 在尾巴加 `SAVECONFIG` |
+| `apply_init_commands(save_to_flash=False, init_commands=None)` | **generator**，每送一條 yield 一行進度。**不迭代就一條都不會送**。`init_commands=None` 用 `MODULE_INIT_COMMANDS`；`save_to_flash=True` 在尾巴加 `SAVECONFIG`。任一條被拒或逾時沒回覆就拋 `UM982InitError`，後面的不再送，所以前面失敗時 `SAVECONFIG` 不會寫入 |
 | `read_sentence()` | 讀一行，逾時回 `None` |
 | `read_fixes()` | 無限迴圈，每次 GGA／GSA／THS 更新後 yield。**每次 yield 的是同一個 `GnssFix` 物件**（它代表接收機當前狀態），要保存快照用 `dataclasses.replace(fix)` |
 | `fix` | 目前的 `GnssFix` |
 
 `UM982ReadError`：埠未開就讀，或 `read_fixes()` 連續空讀達上限。
 
-### `InitTiming(cmd_delay_s=0.08, saveconfig_settle_s=0.35, drain_lines_max=3, drain_read_timeout_s=0.05)`
+`UM982InitError`：初始化指令被模組拒收（訊息帶模組原話），或 `reply_timeout_s` 內沒有回覆。
+
+### `InitTiming(cmd_delay_s=0.08, saveconfig_settle_s=0.35, reply_timeout_s=5.0, drain_read_timeout_s=0.05)`
 
 欄位意義同 `[init]` 段同名 key。
 
@@ -273,7 +278,7 @@ receiver = UM982(
 | `EMPTY_READ_LIMIT` | 10 | `run.empty_read_limit` |
 | `INIT_CMD_DELAY_S` | 0.08 | `init.cmd_delay_s` |
 | `INIT_SAVECONFIG_SETTLE_S` | 0.35 | `init.saveconfig_settle_s` |
-| `INIT_DRAIN_LINES_MAX` | 3 | `init.drain_lines_max` |
+| `INIT_REPLY_TIMEOUT_S` | 5.0 | `init.reply_timeout_s` |
 | `INIT_DRAIN_READ_TIMEOUT_S` | 0.05 | `init.drain_read_timeout_s` |
 | `MODULE_INIT_COMMANDS` | 見下表 | `init.commands` |
 
@@ -298,19 +303,32 @@ receiver = UM982(
 
 ### 預設初始化指令（`MODULE_INIT_COMMANDS`）
 
-| 指令 | 參數意義 | 作用 | 不下的後果 |
-|---|---|---|---|
-| `UNLOGCOM` | — | 清掉當前埠既有的週期輸出 | 新舊設定疊加而非取代，頻寬爆掉且每次上電行為不同 |
-| `CONFIG MODE UAV` | 動態模型 | 設為無人機 | 快速運動時濾波器把真實運動當雜訊壓掉，位置／航向滯後 |
-| `CONFIG HEADING FIXLENGTH` | 基線模式 | 宣告雙天線基線長度固定 | 模糊度搜索空間變大，heading 收斂慢，THS 長時間回 `V` |
-| `CONFIG NMEA GGA/RMC/THS/VTG ONCHANGED 0.05` | 輸出週期 0.05 s＝**20 Hz** | 主資料流 | 控制迴路吃不到足夠更新率 |
-| `CONFIG NMEA GSV/GSA/GST ONCHANGED 1` | 輸出週期 1 s＝**1 Hz** | 診斷流 | 全開 20 Hz 約吃掉 70% 埠容量，buffer 滿會吐截斷語句 |
-| `KSXT 0.05` | 輸出週期 0.05 s＝20 Hz | 廠商專有句 | 目前未解析，見「已知限制」 |
-| `SAVECONFIG` | — | 寫入 flash | 不在清單內，只由 `save_config` 附加；見下方說明 |
+寫法依 Unicore《Reference Commands Manual for N4 High Precision Products》R1.15，並在 UM982 R4.10Build13495 上逐條實測回 `response: OK`。
 
-- **`UNLOGCOM` 為什麼必須第一條**：設定存在 flash，上電會自動恢復上次的輸出清單。不先清空就下 `CONFIG NMEA`，等於在舊清單上疊加 —— 你以為只開了 7 種語句，實際可能吐十幾種。症狀是 checksum 偶發失敗、資料跳拍，而且**每次上電表現不一樣**，除錯毫無再現性。
-- **為什麼診斷語句降到 1 Hz**：230400 baud ÷ 10 bit/byte ≈ 23 KB/s。若全部 20 Hz，約 20 × 800 bytes ≈ 16 KB/s，逼近容量 70%。GSV 尤其肥（11 顆可見衛星要 3 句），20 Hz 純屬浪費。DOP 與衛星清單是給人看的，1 Hz 綽綽有餘。
-- **`SAVECONFIG` 為什麼預設關閉、且禁止寫進 `commands`**：NOR flash 寫入壽命典型 10K–100K 次。設定下過一次就存住了，日常跑腳本只需要 `UNLOGCOM` + `CONFIG NMEA`（揮發性設定本來就要重下）。每次都寫、而且寫的內容一模一樣，純粹消耗壽命。寫爛的症狀是 `SAVECONFIG` 靜默失敗或上電設定丟失 —— 屆時你不會聯想到 flash 壽命。
+| 指令 | 參數意義 | 作用 | 不下的後果 | 手冊 |
+|---|---|---|---|---|
+| `UNLOG` | — | 停掉收到指令那個埠的全部週期輸出 | 新舊清單疊加而非取代，頻寬爆掉且每次上電行為不同 | §8.4 |
+| `MODE ROVER UAV` | 動態模型 | 無人機動態（UM982 出廠預設就是它） | flash 裡存了別的模式（如 `SURVEY`）的模組，上電行為跟別台不一樣 | §3.4 |
+| `CONFIG HEADING FIXLENGTH` | 航向模式 | 宣告雙天線基線長度固定（出廠預設） | 被改成 `STATIC`／`LOWDYNAMIC`／`TRACTOR` 等其他場景的模式；論壇反映 `TRACTOR` 對航向平均很重 | §4.18 |
+| `CONFIG SMOOTH HEADING 0` | 平滑歷元數，0＝關 | 關閉航向平滑（出廠預設關） | 有些廠家／網上流傳的配置存了 `SMOOTH HEADING 10`，AgOpenGPS 論壇有人因此航向滯後約 1 s | §4.49 |
+| `GPGGA`／`GPRMC`／`GPTHS`／`GPVTG 0.05` | 輸出週期 0.05 s＝**20 Hz** | 主資料流 | 控制迴路吃不到足夠更新率 | §7 |
+| `GPGSV`／`GPGSA`／`GPGST 1` | 輸出週期 1 s＝**1 Hz** | 診斷流 | 見下方「頻寬」 | §7 |
+| `KSXT 0.05` | 輸出週期 0.05 s＝20 Hz | 廠商專有句 | 目前未解析，見「已知限制」 | §7.5.49 |
+| `SAVECONFIG` | — | 寫入 flash | 不在清單內，只由 `save_config` 附加；見下方說明 | §8.3 |
+
+- **日誌請求的寫法**：`GPxxx <週期>`。手冊規定**只能用 GP 前綴**，不能寫 `GN`／`GB`／`GL`／`GA`，但輸出照樣帶各星座的 talker（`$GNGGA`、`$GBGSV`…）。`GPGSV 1` 在 `UNILOGLIST` 裡顯示成 `GNGSV COM1 1`，五個星座（GP／GB／GA／GL／GQ）都會吐。不帶埠號＝輸出到收到指令的那個埠，換接 COM2 不用改指令。數字是週期（秒），不是頻率；`ONCHANGED` 只適用部分 Unicore 格式日誌，NMEA 語句不能用。
+- **`UNLOG` 為什麼必須第一條**：設定存在 flash，上電會自動恢復上次的輸出清單。不先清空就下日誌請求，等於在舊清單上疊加 —— 你以為只開了 8 種語句，實際可能吐十幾種。症狀是 checksum 偶發失敗、資料跳拍，而且**每次上電表現不一樣**，除錯毫無再現性。
+- **頻寬：為什麼診斷語句必須 1 Hz**：230400 baud 8N1 ≈ 23 KB/s。NMEA 4.10 的 GSV 是「**每星座 × 每頻點**」各一組（室內只看到 1 顆 GPS 星也要 3 句 GPGSV），開闊天空下每輪估計 30–40 句、約 2.5 KB，10 Hz 光 GSV 就約 25 KB/s。
+
+  | 輸出清單 | 吞吐 | 佔 230400 |
+  |---|---|---|
+  | 舊 flash 清單（GSV 等 10 Hz、KSXT／HPR 20 Hz），室內 3 顆星 | 實測 8.1 KB/s | 35% |
+  | 同上，開闊天空 | 估算 ~30 KB/s | **~130%，超載** |
+  | 本預設清單，室內 | 實測 7.9 KB/s | 34% |
+  | 本預設清單，開闊天空 | 估算 ~11.5 KB/s | ~50% |
+
+  超載時模組不報錯，輸出在發送緩衝裡排隊，表現為**所有語句一起固定滯後好幾秒**，最先被察覺的通常是轉動後的航向。DOP 與衛星清單是給人看的，1 Hz 綽綽有餘。
+- **`SAVECONFIG` 為什麼預設關閉、且禁止寫進 `commands`**：NOR flash 寫入壽命典型 10K–100K 次。設定下過一次就存住了，日常跑腳本只需要 `UNLOG` + 日誌請求（揮發性設定本來就要重下）。每次都寫、而且寫的內容一模一樣，純粹消耗壽命。寫爛的症狀是 `SAVECONFIG` 靜默失敗或上電設定丟失 —— 屆時你不會聯想到 flash 壽命。`SAVECONFIG` 排在最後，前面任何一條被拒都會中止，不會把半套配置寫進 flash。
 
 ### NMEA 語句對照表
 
@@ -330,5 +348,95 @@ receiver = UM982(
 - **`KSXT` 已開啟輸出但尚未解析**，20 Hz × 約 130 bytes ≈ 26 kbps 白白浪費。刻意保留是為了能用 `dump` 抓到實物語句，照著寫 parser；欄位定義必須對照官方手冊，猜不得。確定不用就從 `commands` 移除。
 - **`ALT_HAE` 依賴 GGA 第 11 欄的大地水準面差距**，模組未輸出該欄時顯示 `--`（`ALT_MSL` 仍正常）。實測本模組有輸出，差值約 18.9 m。
 - **雙天線 heading 需要收斂時間**，冷啟動或遮擋後重新收斂期間 THS 回 `V`。
-- **基線長度**：`FIXLENGTH` 只宣告「長度固定」，不帶長度值。手冊另有 `CONFIG HEADING LENGTH` 設定實際長度與容差，預設清單**不含**這條（基線是台架屬性，不是模組屬性），各台架在自己的 `um982.toml` 加，見「固定基線配置」。
-- **指令回覆格式待台架確認**：`-> response: OK` 依 Unicore N4 的 `$command,<指令>,response: OK*xx` 格式匹配，尚未對實機驗證。
+- **基線長度**：`FIXLENGTH` 只宣告「長度固定」，不帶長度值。手冊另有 `CONFIG HEADING LENGTH <基線> <容差>`，預設清單**不含**這條（基線是台架屬性，不是模組屬性），各台架在自己的 `um982.toml` 加，見「固定基線配置」。
+- **航向延遲修正尚未在開闊天空下驗收**：見下方「排障」的案例，修正後的室外負載是估算值。
+
+---
+
+## 排障
+
+### 查模組 flash 裡實際存了什麼
+
+`commands` 寫了什麼不代表模組在跑什麼。以下指令只讀、不改配置：
+
+| 指令 | 看什麼 |
+|---|---|
+| `UNILOGLIST` | 每個埠實際在跑的日誌與週期。跟 `commands` 對不上，就是有指令沒生效 |
+| `CONFIG` | 全部配置。找 `$CONFIG,SMOOTH`（航向平滑）、`$CONFIG,HEADING`（航向模式）、`$CONFIG,COM1`（波特率） |
+| `MODE` | 動態模型，例：`MODE ROVER UAV` |
+| `VERSIONA` | 固件版本，例：`R4.10Build13495` |
+
+本 CLI 不提供任意指令送出。回覆夾在 NMEA 串流裡，認 `$command,`、`$CONFIG,`、`#`、`<` 開頭的行：
+
+```bash
+python3 -c "import serial,time; p=serial.Serial('/dev/ttyGNSS',230400,timeout=1); p.write(b'UNILOGLIST\r\n'); time.sleep(1.5); print(p.read(p.in_waiting).decode(errors='ignore'))" | grep -E '^(\$command|\$CONFIG|#|<)'
+```
+
+指令回覆格式（R4.10Build13495 實測）：
+
+| 情況 | 回覆 |
+|---|---|
+| 接受 | `$command,UNLOG,response: OK*01` |
+| 指令不存在 | `$command,UNLOGCOM,response: PARSING FAILED NO MATCHING FUNC  UNLOGCOM*05` |
+| 參數不對 | `$command,CONFIG MODE UAV,response: PARSING FAILED MISSING FIELD,*48` |
+
+### 案例：轉動後航向滯後約 3 秒（2026-10）
+
+| 項目 | 內容 |
+|---|---|
+| 現象 | 1.5 m 基線，轉動天線桿後 `YAW` 約 3 s 才跟上 |
+| 查到 | 舊預設 `commands` 裡的 `UNLOGCOM`、`CONFIG MODE UAV`、`CONFIG NMEA ... ONCHANGED` 全被模組拒收（`PARSING FAILED`），而舊驅動每條只讀 3 行找回覆，拒收的回覆前面隔了 20–30 行 NMEA，一條都沒撈到。模組一直跑 flash 舊清單：GGA／GSA／GST／GSV／RMC／VTG／THS 10 Hz，KSXT／HPR 20 Hz |
+| 判斷 | 開闊天空下 GSV 10 Hz 讓輸出超過 230400 容量（見「頻寬」），發送緩衝排隊，所有語句一起滯後。3 s 對應約 64 KB 緩衝，手冊沒寫緩衝大小，這一環是推斷；當時天線在室內，未在室外復現 |
+| 已排除 | 航向平滑（`CONFIG` 回讀沒有 `SMOOTH` 行）、動態模型（`MODE ROVER UAV`）、航向模式（`FIXLENGTH`）、主機端讀取太慢（主機跟不上的特徵是延遲一直漲，不是固定 3 s） |
+| 修正 | 指令改用手冊寫法；初始化改成按時間等回覆，被拒或沒回覆就 `Init failed` 退出；跑一次 `--save-config` 把 flash 舊清單換掉 |
+| 對照 | ArduPilot 對 UM982 硬編碼的延遲是 0.14 s（飛行日誌實測） |
+
+### 量串口負載與延遲
+
+拿 GGA 裡的 UTC 對主機收到的時刻，同時算吞吐。只讀，不送任何指令：
+
+```python
+import datetime
+import sys
+import time
+
+import serial
+
+port_name = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyGNSS"
+measure_window_s = 5.0
+port = serial.Serial(port_name, 230400, timeout=0.1)
+port.reset_input_buffer()
+started_at_s = time.monotonic()
+total_bytes = 0
+pending_bytes = b""
+gga_age_ms = []
+while time.monotonic() - started_at_s < measure_window_s:
+    received_bytes = port.read(4096)
+    arrived_utc = datetime.datetime.now(datetime.timezone.utc)
+    total_bytes += len(received_bytes)
+    pending_bytes += received_bytes
+    *complete_lines, pending_bytes = pending_bytes.split(b"\n")
+    for raw_line in complete_lines:
+        fields = raw_line.decode("ascii", "replace").split(",")
+        if fields[0] != "$GNGGA" or len(fields[1]) < 6:
+            continue
+        utc_text = fields[1]
+        sentence_utc = arrived_utc.replace(
+            hour=int(utc_text[0:2]),
+            minute=int(utc_text[2:4]),
+            second=int(utc_text[4:6]),
+            microsecond=int(float("0" + utc_text[6:]) * 1e6),
+        )
+        age_s = (arrived_utc - sentence_utc).total_seconds()
+        gga_age_ms.append(age_s * 1000.0)
+port.close()
+bytes_per_s = total_bytes / measure_window_s
+print(f"{bytes_per_s:.0f} B/s, {bytes_per_s / 23040 * 100:.0f}% of 230400")
+gga_age_ms.sort()
+if gga_age_ms:
+    print(f"GGA age median {gga_age_ms[len(gga_age_ms) // 2]:.0f} ms")
+```
+
+- **主機時鐘不可全信**：WSL 台架實測主機比 NTP 快約 100 ms，timesyncd 還修過 -484 ms 的漂移。所以 GGA 年齡只拿來**相對比較**：本台架室內約 460 ms；超載排隊時應漲到秒級，正常時回到這個基線附近。
+- **吞吐**：開闊天空下超過 ~90% 就是快超載了，應該先砍輸出清單，而不是先加波特率。
+- **模組自報延遲**：Unicore 格式日誌（`#` 開頭，如 `UNIHEADINGA`）的表頭最後一欄是「輸出時刻 − 信號接收時刻」，單位 ms（手冊 §7.5.1）。它能把模組內部延遲跟串口排隊分開。
