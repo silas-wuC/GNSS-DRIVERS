@@ -33,9 +33,13 @@ GSV_SENTENCE = (
     "$GPGSV,3,1,11,03,60,180,45,09,45,090,42,17,30,270,40,"
     "19,20,045,38,1*68"
 )
-KSXT_SENTENCE = (
-    "$KSXT,20260922062133.00,121.58119,25.06243,45.123,123.45,-0.53,"
-    "0,0,3,21,0.02,0.01,0.00,0.00,0.001,0.001,0.001*07"
+# Captured from a UM982 R4.10Build13495 indoors: single-point position
+# and no heading, because ANT2 solved with no satellites. Field layout
+# per Unicore N4 manual R1.15 Table 7-107; the fixture it replaces was
+# invented and had every field after the heading in the wrong place.
+KSXT_NO_HEADING = (
+    "$KSXT,20261021094631.60,121.45666133,24.99834109,36.6279,0.00,"
+    "0.00,199.17,0.918,0.00,1,0,0,15,,,,-0.301,-0.867,0.161,,*36"
 )
 
 UNPARSED_SENTENCES = [
@@ -43,5 +47,5 @@ UNPARSED_SENTENCES = [
     VTG_SENTENCE,
     GST_SENTENCE,
     GSV_SENTENCE,
-    KSXT_SENTENCE,
+    KSXT_NO_HEADING,
 ]

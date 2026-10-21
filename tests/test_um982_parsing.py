@@ -6,7 +6,7 @@ from conftest import (
     GSA_ALL_SLOTS_USED,
     GSA_WITH_SYSTEM_ID,
     GSA_WITHOUT_SYSTEM_ID,
-    KSXT_SENTENCE,
+    KSXT_NO_HEADING,
     THS_INVALID,
     THS_VALID,
 )
@@ -66,7 +66,7 @@ def test_ths_invalid_status_clears_stale_heading():
 
 def test_known_but_unparsed_sentence_leaves_fix_untouched():
     fix = GnssFix()
-    assert update_fix_from_sentence(KSXT_SENTENCE, fix) == "KSXT"
+    assert update_fix_from_sentence(KSXT_NO_HEADING, fix) == "KSXT"
     assert fix == GnssFix()
 
 

@@ -3,7 +3,7 @@ import pytest
 from conftest import (
     GGA_RTK_FIXED,
     GSA_WITH_SYSTEM_ID,
-    KSXT_SENTENCE,
+    KSXT_NO_HEADING,
     THS_VALID,
     UNPARSED_SENTENCES,
 )
@@ -37,7 +37,7 @@ def test_sentence_type_is_talker_agnostic():
 
 def test_sentence_type_keeps_proprietary_name_intact():
     # Trimming to three characters would yield "SXT" and break dispatch.
-    assert nmea.sentence_type(KSXT_SENTENCE) == "KSXT"
+    assert nmea.sentence_type(KSXT_NO_HEADING) == "KSXT"
 
 
 def test_latlon_conversion_handles_hemispheres():
